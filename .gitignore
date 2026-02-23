@@ -1,0 +1,48 @@
+# Build outputs
+out/
+build/
+target/
+*.class
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# VS Code
+.vscode/
+
+# Gradle
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+
+# Maven
+*.jar
+*.war
+
+# Minecraft / launcher runtime data (nie commituj tych!)
+*.stellarlauncher/
+run/
+natives/
+assets/
+libraries/
+versions/
+
+# Logi
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Pliki tymczasowe
+*.tmp
+*.bak
