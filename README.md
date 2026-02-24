@@ -37,7 +37,7 @@ Przy pierwszym uruchomieniu launcher tworzy wszystko w `~/.stellarlauncher/`:
 ```
 
 ### 👤 Zarządzanie kontami
-Konta (premium i offline) obsługiwane są przez moda **[InGameAccountSwitcher](https://www.curseforge.com/minecraft/mc-mods/in-game-account-switcher)** — wrzuć go do folderu `mods/` i przełączaj konta bezpośrednio w grze.
+Launcher zawiera wbudowanego moda **InGameAccountSwitcher** — przełączaj konta premium i offline bezpośrednio w grze bez restartowania launchera.
 
 ---
 
