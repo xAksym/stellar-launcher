@@ -67,7 +67,7 @@ class LauncherGUI extends JFrame {
     static {
         FABRIC_LOADER_VERSIONS = new java.util.HashMap<>();
         FABRIC_LOADER_VERSIONS.put("1.19.2", "0.14.24");
-        FABRIC_LOADER_VERSIONS.put("1.20.1", "0.15.11");
+        FABRIC_LOADER_VERSIONS.put("1.20.1", "0.18.4");
         FABRIC_LOADER_VERSIONS.put("1.21.3", "0.18.4");
         // 1.8.9 nie używa Fabric — vanilla launch wrapper
     }
@@ -428,8 +428,10 @@ class LauncherGUI extends JFrame {
         launchButton.setFont(MinecraftFont.getBold(24));
         launchButton.addActionListener(e -> launchMinecraft());
         centerCard.add(launchButton);
-
-        JLabel infoLabel = new JLabel("Accounts managed in-game via InGameAccountSwitcher mod", SwingConstants.CENTER);
+        JLabel infoLabel = new JLabel(
+                "<html><center>Stellar Launcher is an open-source Minecraft launcher focused on performance and simplicity.<br>"
+                        + "It uses Fabric Loader and is compatible with most mods.</center></html>",
+                SwingConstants.CENTER);
         infoLabel.setFont(MinecraftFont.getFont(11));
         infoLabel.setForeground(new Color(100, 100, 100));
         infoLabel.setBounds(0, 340, 800, 20);
@@ -1897,7 +1899,10 @@ class LauncherGUI extends JFrame {
     }
 
     private void saveLastVersion() {
-        config.addProperty("lastVersion", selectedVersion);
+        String cleanVersion = selectedVersion.contains("-")
+                ? selectedVersion.substring(selectedVersion.lastIndexOf("-") + 1)
+                : selectedVersion;
+        config.addProperty("lastVersion", cleanVersion);
         saveConfig();
     }
 
