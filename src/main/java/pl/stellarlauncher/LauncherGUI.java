@@ -2,7 +2,6 @@ package pl.stellarlauncher;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import javax.swing.border.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
@@ -40,13 +39,19 @@ class LauncherGUI extends JFrame {
 
     private JScrollPane scrollPane;
 
+    private final Color BG_DEEP = new Color(9, 11, 16);
+    private final Color BG_SIDEBAR = new Color(13, 15, 22);
+    private final Color BG_CARD = new Color(14, 16, 24);
+    private final Color ACCENT = new Color(0, 194, 255);
+    private final Color ACCENT_DIM = new Color(0, 194, 255, 40);
+    private final Color BORDER = new Color(255, 255, 255, 18);
+    private final Color TEXT_PRI = new Color(255, 255, 255);
+    private final Color TEXT_SEC = new Color(255, 255, 255, 90);
+    private final Color TEXT_DIM = new Color(255, 255, 255, 50);
+    private final Color SUCCESS = new Color(39, 200, 64);
+
     private File configFile;
     private JsonObject config;
-
-    private final Color MC_DARK = new Color(32, 32, 32);
-    private final Color MC_GRAY = new Color(85, 85, 85);
-    private final Color MC_TEXT = new Color(255, 255, 255);
-    private final Color MC_GREEN = new Color(85, 255, 85);
 
     private final java.util.concurrent.BlockingQueue<Runnable> discordUpdateQueue = new java.util.concurrent.LinkedBlockingQueue<>();
 
@@ -213,6 +218,23 @@ class LauncherGUI extends JFrame {
 
     // ─── MODS FOLDERS ────────────────────────────────────────────────────────────
 
+    // Mody blokowane zależnie od GPU vendora
+    // klucz = fragment nazwy pliku (lowercase), wartość = set vendorów które go NIE
+    // obsługują
+    private static final java.util.Map<String, java.util.Set<String>> GPU_MOD_BLACKLIST = new java.util.HashMap<>();
+    static {
+        // Nvidium — tylko NVIDIA, crashuje na Intel i AMD
+        GPU_MOD_BLACKLIST.put("nvidium", new java.util.HashSet<>(java.util.Arrays.asList("INTEL", "AMD")));
+        // ImmediatelyFast — agresywne optymalizacje OpenGL, crashuje na Intel iGPU
+        GPU_MOD_BLACKLIST.put("immediatelyFast", new java.util.HashSet<>(java.util.Arrays.asList("INTEL")));
+        // Exordium — osobny framebuffer, problemy z Intel HD
+        GPU_MOD_BLACKLIST.put("exordium", new java.util.HashSet<>(java.util.Arrays.asList("INTEL")));
+        // Iris — shadery wymagają OpenGL 4.6, Intel HD 630 go nie ogarnia
+        GPU_MOD_BLACKLIST.put("iris", new java.util.HashSet<>(java.util.Arrays.asList("INTEL")));
+        // EntityCulling — occlusion queries buggy na starych Intel driverach
+        GPU_MOD_BLACKLIST.put("entityculling", new java.util.HashSet<>(java.util.Arrays.asList("INTEL")));
+    }
+
     private void createModsFolders() {
         for (String v : new String[] { "1.8.9", "1.19.2", "1.20.1", "1.21.3" })
             new File(StellarLauncher.LAUNCHER_DIR, "mods/" + v).mkdirs();
@@ -336,21 +358,14 @@ class LauncherGUI extends JFrame {
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2d = (Graphics2D) g;
-                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (backgroundImage != null) {
                     g2d.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), null);
-                } else {
-                    g2d.setPaint(new GradientPaint(0, 0, new Color(15, 15, 35), 0, getHeight(), new Color(40, 40, 70)));
+                    g2d.setColor(new Color(9, 11, 16, 200));
                     g2d.fillRect(0, 0, getWidth(), getHeight());
-                    g2d.setColor(new Color(255, 255, 255, 10));
-                    Random rand = new Random(42);
-                    for (int i = 0; i < 100; i++) {
-                        int x = rand.nextInt(getWidth()), y = rand.nextInt(getHeight()), s = rand.nextInt(3) + 1;
-                        g2d.fillOval(x, y, s, s);
-                    }
+                } else {
+                    g2d.setColor(BG_DEEP);
+                    g2d.fillRect(0, 0, getWidth(), getHeight());
                 }
-                g2d.setColor(new Color(0, 0, 0, 120));
-                g2d.fillRect(0, 0, getWidth(), getHeight());
             }
         };
         mainPanel.setLayout(null);
@@ -358,147 +373,316 @@ class LauncherGUI extends JFrame {
 
         createTitleBar(mainPanel);
 
-        JPanel centerCard = createModernCard(240, 160, 800, 380);
-        mainPanel.add(centerCard);
-
-        JLabel titleLabel = new JLabel("STELLAR LAUNCHER", SwingConstants.CENTER);
-        titleLabel.setFont(MinecraftFont.getBold(32));
-        titleLabel.setForeground(new Color(100, 200, 255));
-        titleLabel.setBounds(0, 20, 800, 40);
-        centerCard.add(titleLabel);
-
-        JLabel versionTag = new JLabel("v" + StellarLauncher.VERSION, SwingConstants.CENTER);
-        versionTag.setFont(MinecraftFont.getFont(12));
-        versionTag.setForeground(new Color(150, 150, 150));
-        versionTag.setBounds(0, 62, 800, 20);
-        centerCard.add(versionTag);
-
-        JLabel versionLabelText = new JLabel("Minecraft Version:");
-        versionLabelText.setFont(MinecraftFont.getBold(14));
-        versionLabelText.setForeground(MC_TEXT);
-        versionLabelText.setBounds(50, 105, 300, 25);
-        centerCard.add(versionLabelText);
-
-        versionCombo = new JComboBox<>(new String[] { "1.8.9", "1.19.2", "1.20.1", "1.21.3" });
-        versionCombo.setFont(MinecraftFont.getFont(14));
-        versionCombo.setBounds(50, 133, 300, 40);
-        styleModernComboBox(versionCombo);
-        versionCombo.addActionListener(e -> {
-            String sel = (String) versionCombo.getSelectedItem();
-            if (sel != null) {
-                selectedVersion = sel;
-                saveLastVersion();
+        // ── Sidebar ──────────────────────────────────────────────────────────────
+        JPanel sidebar = new JPanel(null) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setColor(BG_SIDEBAR);
+                g2d.fillRect(0, 0, getWidth(), getHeight());
+                g2d.setColor(BORDER);
+                g2d.fillRect(getWidth() - 1, 0, 1, getHeight());
             }
-        });
-        centerCard.add(versionCombo);
+        };
+        sidebar.setBounds(0, 38, 200, 682);
+        sidebar.setOpaque(false);
 
-        ramLabel = new JLabel("Memory: " + allocatedRAM + " MB");
-        ramLabel.setFont(MinecraftFont.getBold(14));
-        ramLabel.setForeground(MC_TEXT);
-        ramLabel.setBounds(450, 105, 300, 25);
-        centerCard.add(ramLabel);
+        // Logo
+        JLabel logoLabel = new JLabel("STELLAR");
+        logoLabel.setFont(MinecraftFont.getBold(15));
+        logoLabel.setForeground(TEXT_PRI);
+        logoLabel.setBounds(20, 20, 160, 22);
+        sidebar.add(logoLabel);
 
-        ramSlider = new JSlider(1024, 16384, allocatedRAM);
-        ramSlider.setMajorTickSpacing(4096);
-        ramSlider.setPaintTicks(true);
+        JLabel verLabel = new JLabel("v" + StellarLauncher.VERSION);
+        verLabel.setFont(new Font("Consolas", Font.PLAIN, 10));
+        verLabel.setForeground(new Color(255, 255, 255, 50));
+        verLabel.setBounds(20, 44, 160, 14);
+        sidebar.add(verLabel);
+
+        JSeparator sep1 = new JSeparator();
+        sep1.setBounds(0, 68, 200, 1);
+        sep1.setForeground(BORDER);
+        sidebar.add(sep1);
+
+        // Nav buttons
+        String[][] navItems = {
+                { "> Play", "play" },
+                { "= Logs", "logs" },
+                { "# Mods", "mods" },
+                { "* Settings", "settings" },
+                { "@ Repair", "repair" },
+        };
+        int[] navY = { 80, 110, 140, 170, 200 };
+        for (int i = 0; i < navItems.length; i++) {
+            JButton nb = createNavButton(navItems[i][0], 0, navY[i], 200, 30);
+            boolean isActive = navItems[i][1].equals("play");
+            nb.setForeground(isActive ? ACCENT : TEXT_SEC);
+            final int idx = i;
+            nb.addActionListener(e -> {
+                switch (navItems[idx][1]) {
+                    case "logs":
+                        scrollPane.setVisible(!scrollPane.isVisible());
+                        break;
+                    case "mods":
+                        openModsFolder();
+                        break;
+                    case "settings":
+                        openSettings();
+                        break;
+                    case "repair":
+                        openRepairMenu();
+                        break;
+                }
+            });
+            sidebar.add(nb);
+        }
+
+        // GPU badge at bottom of sidebar
+        JPanel gpuBadge = new JPanel(null) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(new Color(39, 200, 64, 18));
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                g2d.setColor(new Color(39, 200, 64, 50));
+                g2d.setStroke(new BasicStroke(1));
+                g2d.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 6, 6);
+                g2d.setColor(SUCCESS);
+                g2d.fillOval(10, getHeight() / 2 - 3, 6, 6);
+            }
+        };
+        gpuBadge.setBounds(8, 640, 184, 24);
+        gpuBadge.setOpaque(false);
+        JLabel gpuLabel = new JLabel("GPU: detecting...");
+        gpuLabel.setFont(new Font("Consolas", Font.PLAIN, 10));
+        gpuLabel.setForeground(new Color(39, 200, 64, 180));
+        gpuLabel.setBounds(24, 5, 156, 14);
+        gpuBadge.add(gpuLabel);
+        sidebar.add(gpuBadge);
+
+        new Thread(() -> {
+            String fullName = detectGPUVendor();
+            SwingUtilities.invokeLater(() -> {
+                // Skróć do max 22 znaków, resztę w toolltipie
+                String display = fullName.length() > 22
+                        ? fullName.substring(0, 20) + "…"
+                        : fullName;
+                gpuLabel.setText("GPU: " + display);
+                gpuBadge.setToolTipText(fullName);
+                gpuLabel.setToolTipText(fullName);
+            });
+        }).start();
+
+        mainPanel.add(sidebar);
+
+        // ── Main area ────────────────────────────────────────────────────────────
+        int mx = 216, mw = 1064;
+
+        // Section: Version
+        JLabel versionSectionLabel = makeSectionLabel("VERSION", mx, 52, mw);
+        mainPanel.add(versionSectionLabel);
+
+        String[] versions = { "1.8.9", "1.19.2", "1.20.1", "1.21.3" };
+        versionCombo = new JComboBox<>(versions);
+        versionCombo.setVisible(false); // hidden, replaced by toggle buttons
+        JButton[] verBtns = new JButton[4];
+        int vBtnW = (mw - 24) / 4;
+        for (int i = 0; i < versions.length; i++) {
+            final String v = versions[i];
+            verBtns[i] = createVersionButton(v, mx + i * (vBtnW + 8), 68, vBtnW, 36, v.equals("1.20.1"));
+            final int fi = i;
+            verBtns[i].addActionListener(e -> {
+                for (JButton b : verBtns)
+                    b.putClientProperty("selected", false);
+                verBtns[fi].putClientProperty("selected", true);
+                for (JButton b : verBtns)
+                    b.repaint();
+                selectedVersion = v;
+                saveLastVersion();
+            });
+            mainPanel.add(verBtns[i]);
+        }
+        verBtns[2].putClientProperty("selected", true); // 1.20.1 default
+
+        // Section: Memory card
+        JPanel memCard = createSlimCard(mx, 120, mw, 80);
+        mainPanel.add(memCard);
+
+        JLabel memSection = makeSectionLabel("MEMORY ALLOCATION", 0, 12, mw - 40);
+        memSection.setBounds(16, 12, mw - 40, 14);
+        memCard.add(memSection);
+
+        ramLabel = new JLabel("4096 MB");
+        ramLabel.setFont(new Font("Consolas", Font.PLAIN, 13));
+        ramLabel.setForeground(ACCENT);
+        ramLabel.setBounds(mw - 90, 10, 80, 18);
+        ramLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        memCard.add(ramLabel);
+
+        ramSlider = new JSlider(1024, 16384, allocatedRAM) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int track = getHeight() / 2;
+                int filled = (int) ((getWidth() - 16)
+                        * ((getValue() - getMinimum()) / (double) (getMaximum() - getMinimum())));
+                g2d.setColor(new Color(255, 255, 255, 20));
+                g2d.fillRoundRect(8, track - 1, getWidth() - 16, 2, 2, 2);
+                g2d.setColor(ACCENT);
+                g2d.fillRoundRect(8, track - 1, filled, 2, 2, 2);
+                g2d.setColor(ACCENT);
+                g2d.fillOval(8 + filled - 6, track - 6, 12, 12);
+                g2d.setColor(new Color(0, 0, 0, 100));
+                g2d.fillOval(8 + filled - 4, track - 4, 8, 8);
+            }
+        };
         ramSlider.setOpaque(false);
-        ramSlider.setForeground(new Color(100, 200, 255));
-        ramSlider.setBounds(450, 133, 300, 40);
+        ramSlider.setBounds(16, 36, mw - 110, 28);
         ramSlider.addChangeListener(e -> {
             allocatedRAM = ramSlider.getValue();
-            ramLabel.setText("Memory: " + allocatedRAM + " MB");
+            ramLabel.setText(allocatedRAM + " MB");
             saveRAMSettings();
         });
-        centerCard.add(ramSlider);
+        memCard.add(ramSlider);
 
-        autoCloseCheckbox = new JCheckBox("Close launcher when game starts");
-        autoCloseCheckbox.setFont(MinecraftFont.getFont(12));
-        autoCloseCheckbox.setForeground(new Color(200, 200, 200));
+        autoCloseCheckbox = new JCheckBox("Close launcher when game starts") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                // box
+                g2d.setColor(isSelected() ? ACCENT_DIM : new Color(255, 255, 255, 12));
+                g2d.fillRoundRect(0, (getHeight() - 14) / 2, 14, 14, 4, 4);
+                g2d.setColor(isSelected() ? new Color(0, 194, 255, 100) : BORDER);
+                g2d.setStroke(new BasicStroke(1));
+                g2d.drawRoundRect(0, (getHeight() - 14) / 2, 13, 13, 4, 4);
+                if (isSelected()) {
+                    g2d.setColor(ACCENT);
+                    g2d.setStroke(new BasicStroke(1.5f));
+                    int by = (getHeight() - 14) / 2;
+                    g2d.drawLine(3, by + 7, 5, by + 10);
+                    g2d.drawLine(5, by + 10, 11, by + 4);
+                }
+                g2d.setFont(getFont());
+                g2d.setColor(TEXT_SEC);
+                FontMetrics fm = g2d.getFontMetrics();
+                g2d.drawString(getText(), 20, (getHeight() + fm.getAscent()) / 2 - 2);
+            }
+        };
+        autoCloseCheckbox.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         autoCloseCheckbox.setOpaque(false);
-        autoCloseCheckbox.setBounds(50, 195, 320, 25);
+        autoCloseCheckbox.setBounds(16, 56, 320, 20);
         autoCloseCheckbox.setFocusPainted(false);
         autoCloseCheckbox.setSelected(autoCloseLauncher);
         autoCloseCheckbox.addActionListener(e -> {
             autoCloseLauncher = autoCloseCheckbox.isSelected();
             saveAutoCloseSettings();
+            autoCloseCheckbox.repaint();
         });
-        centerCard.add(autoCloseCheckbox);
+        memCard.add(autoCloseCheckbox);
 
-        launchButton = createModernButton("LAUNCH GAME", 200, 250, 400, 65);
-        launchButton.setFont(MinecraftFont.getBold(24));
+        // Launch button
+        launchButton = new JButton("LAUNCH GAME") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                Color base = isEnabled()
+                        ? (getModel().isPressed() ? new Color(0, 160, 210)
+                                : getModel().isRollover() ? new Color(40, 210, 255) : ACCENT)
+                        : new Color(60, 70, 90);
+                g2d.setColor(base);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2d.setFont(getFont());
+                FontMetrics fm = g2d.getFontMetrics();
+                g2d.setColor(new Color(6, 8, 16));
+                int tx = (getWidth() - fm.stringWidth(getText())) / 2;
+                int ty = (getHeight() + fm.getAscent()) / 2 - 2;
+                g2d.drawString(getText(), tx, ty);
+            }
+        };
+        launchButton.setBounds(mx, 218, mw, 44);
+        launchButton.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        launchButton.setFocusPainted(false);
+        launchButton.setBorderPainted(false);
+        launchButton.setContentAreaFilled(false);
+        launchButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
         launchButton.addActionListener(e -> launchMinecraft());
-        centerCard.add(launchButton);
-        JLabel infoLabel = new JLabel(
-                "<html><center>Stellar Launcher is an open-source Minecraft launcher focused on performance and simplicity.<br>"
-                        + "It uses Fabric Loader and is compatible with most mods.</center></html>",
-                SwingConstants.CENTER);
-        infoLabel.setFont(MinecraftFont.getFont(11));
-        infoLabel.setForeground(new Color(100, 100, 100));
-        infoLabel.setBounds(0, 340, 800, 20);
-        centerCard.add(infoLabel);
+        launchButton.addMouseListener(new MouseAdapter() {
+            public void mouseEntered(MouseEvent e) {
+                launchButton.repaint();
+            }
 
-        JPanel bottomToolbar = createModernCard(240, 558, 800, 52);
-        mainPanel.add(bottomToolbar);
-
-        JButton modsButton = createSmallButton("📁 Mods", 20, 11, 110, 30);
-        modsButton.addActionListener(e -> openModsFolder());
-        bottomToolbar.add(modsButton);
-
-        JButton settingsButton = createSmallButton("⚙️ Settings", 145, 11, 120, 30);
-        settingsButton.addActionListener(e -> openSettings());
-        bottomToolbar.add(settingsButton);
-
-        JButton repairButton = createSmallButton("🔧 Repair", 280, 11, 110, 30);
-        repairButton.addActionListener(e -> openRepairMenu());
-        bottomToolbar.add(repairButton);
-
-        JButton killButton = createSmallButton("⚠️ Kill", 405, 11, 90, 30);
-        killButton.addActionListener(e -> killMinecraftInstance());
-        bottomToolbar.add(killButton);
-
-        JButton logsButton = createSmallButton("📋 Logs", 510, 11, 110, 30);
-        logsButton.addActionListener(e -> {
-            boolean visible = scrollPane.isVisible();
-            scrollPane.setVisible(!visible);
-            logsButton.setText(visible ? "📋 Logs" : "❌ Hide");
+            public void mouseExited(MouseEvent e) {
+                launchButton.repaint();
+            }
         });
-        bottomToolbar.add(logsButton);
+        mainPanel.add(launchButton);
 
-        JButton copyLogsButton = createSmallButton("📄 Copy", 635, 11, 100, 30);
-        copyLogsButton.addActionListener(e -> copyLogs());
-        bottomToolbar.add(copyLogsButton);
+        // Status row
+        statusLabel = new JLabel("● Ready to launch");
+        statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        statusLabel.setForeground(new Color(39, 200, 64, 160));
+        statusLabel.setBounds(mx, 268, mw, 16);
+        mainPanel.add(statusLabel);
 
-        logArea = new JTextArea();
-        logArea.setEditable(false);
-        logArea.setBackground(new Color(20, 20, 20));
-        logArea.setForeground(MC_GREEN);
-        logArea.setFont(new Font("Consolas", Font.PLAIN, 11));
-        logArea.setMargin(new Insets(10, 10, 10, 10));
+        // Separator
+        JPanel divider = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                g.setColor(BORDER);
+                g.fillRect(0, 0, getWidth(), 1);
+            }
+        };
+        divider.setBounds(mx, 294, mw, 1);
+        divider.setOpaque(false);
+        mainPanel.add(divider);
 
-        scrollPane = new JScrollPane(logArea);
-        scrollPane.setBounds(240, 160, 800, 380);
-        scrollPane.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(new Color(100, 200, 255, 100), 2, true),
-                BorderFactory.createEmptyBorder(5, 5, 5, 5)));
-        scrollPane.setOpaque(false);
-        scrollPane.getViewport().setOpaque(false);
-        scrollPane.setVisible(false);
-        mainPanel.add(scrollPane);
+        // Toolbar
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        toolbar.setBounds(mx, 303, mw, 30);
+        toolbar.setOpaque(false);
+        String[] toolNames = { "Mods folder", "Repair", "Kill instance", "Copy logs" };
+        for (String name : toolNames) {
+            JButton tb = createToolbarButton(name);
+            tb.addActionListener(e -> {
+                switch (name) {
+                    case "Mods folder":
+                        openModsFolder();
+                        break;
+                    case "Repair":
+                        openRepairMenu();
+                        break;
+                    case "Kill instance":
+                        killMinecraftInstance();
+                        break;
+                    case "Copy logs":
+                        copyLogs();
+                        break;
+                }
+            });
+            toolbar.add(tb);
+        }
+        mainPanel.add(toolbar);
 
+        // Progress bar
         progressBar = new JProgressBar() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2d = (Graphics2D) g;
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2d.setColor(new Color(30, 30, 30));
-                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                int pw = (int) ((getWidth() - 4) * (getValue() / (double) getMaximum()));
+                g2d.setColor(new Color(255, 255, 255, 12));
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 4, 4);
+                int pw = (int) ((getWidth() - 2) * (getValue() / (double) getMaximum()));
                 if (pw > 0) {
-                    g2d.setPaint(new GradientPaint(0, 0, new Color(100, 200, 255), pw, 0, new Color(50, 150, 255)));
-                    g2d.fillRoundRect(2, 2, pw, getHeight() - 4, 8, 8);
+                    g2d.setColor(ACCENT);
+                    g2d.fillRoundRect(1, 1, pw, getHeight() - 2, 3, 3);
                 }
                 if (getString() != null && !getString().isEmpty()) {
-                    g2d.setColor(Color.WHITE);
+                    g2d.setColor(TEXT_PRI);
                     g2d.setFont(getFont());
                     FontMetrics fm = g2d.getFontMetrics();
                     g2d.drawString(getString(), (getWidth() - fm.stringWidth(getString())) / 2,
@@ -507,18 +691,29 @@ class LauncherGUI extends JFrame {
             }
         };
         progressBar.setStringPainted(true);
-        progressBar.setBounds(240, 622, 800, 22);
-        progressBar.setFont(MinecraftFont.getFont(10));
+        progressBar.setBounds(mx, 342, mw, 14);
+        progressBar.setFont(new Font("Consolas", Font.PLAIN, 10));
         progressBar.setVisible(false);
         progressBar.setOpaque(false);
         progressBar.setBorderPainted(false);
         mainPanel.add(progressBar);
 
-        statusLabel = new JLabel("Ready to launch", SwingConstants.CENTER);
-        statusLabel.setFont(MinecraftFont.getFont(12));
-        statusLabel.setForeground(new Color(150, 150, 150));
-        statusLabel.setBounds(240, 646, 800, 20);
-        mainPanel.add(statusLabel);
+        // Log area
+        logArea = new JTextArea();
+        logArea.setEditable(false);
+        logArea.setBackground(new Color(8, 10, 15));
+        logArea.setForeground(new Color(0, 220, 130));
+        logArea.setFont(new Font("Consolas", Font.PLAIN, 11));
+        logArea.setMargin(new Insets(10, 12, 10, 12));
+        logArea.setCaretColor(ACCENT);
+
+        scrollPane = new JScrollPane(logArea);
+        scrollPane.setBounds(mx, 360, mw, 290);
+        scrollPane.setBorder(BorderFactory.createLineBorder(BORDER, 1));
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setVisible(false);
+        mainPanel.add(scrollPane);
 
         add(mainPanel);
         log("✨ StellarLauncher v" + StellarLauncher.VERSION + " started!");
@@ -526,50 +721,54 @@ class LauncherGUI extends JFrame {
 
     // ─── UI HELPERS ──────────────────────────────────────────────────────────────
 
-    private JPanel createModernCard(int x, int y, int width, int height) {
+    private JLabel makeSectionLabel(String text, int x, int y, int w) {
+        JLabel l = new JLabel(text);
+        l.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        l.setForeground(new Color(255, 255, 255, 50));
+        l.setBounds(x, y, w, 14);
+        return l;
+    }
+
+    private JPanel createSlimCard(int x, int y, int w, int h) {
         JPanel card = new JPanel(null) {
             @Override
             protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
                 Graphics2D g2d = (Graphics2D) g;
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2d.setColor(new Color(20, 20, 30, 200));
-                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
-                g2d.setPaint(new GradientPaint(0, 0, new Color(100, 200, 255, 100), 0, getHeight(),
-                        new Color(50, 150, 255, 50)));
-                g2d.setStroke(new BasicStroke(2));
-                g2d.drawRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 20, 20);
+                g2d.setColor(BG_CARD);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2d.setColor(BORDER);
+                g2d.setStroke(new BasicStroke(1));
+                g2d.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
             }
         };
-        card.setBounds(x, y, width, height);
+        card.setBounds(x, y, w, h);
         card.setOpaque(false);
         return card;
     }
 
-    private JButton createModernButton(String text, int x, int y, int width, int height) {
+    private JButton createVersionButton(String text, int x, int y, int w, int h, boolean selected) {
         JButton btn = new JButton(text) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2d = (Graphics2D) g;
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                Color base = getModel().isRollover() ? new Color(100, 200, 255) : new Color(50, 150, 255);
-                g2d.setPaint(new GradientPaint(0, 0, base, 0, getHeight(), base.darker()));
-                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
-                g2d.setColor(new Color(255, 255, 255, 50));
-                g2d.setStroke(new BasicStroke(2));
-                g2d.drawRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 15, 15);
-                g2d.setFont(getFont());
+                boolean sel = Boolean.TRUE.equals(getClientProperty("selected"));
+                boolean hover = getModel().isRollover();
+                g2d.setColor(sel ? ACCENT_DIM : hover ? new Color(255, 255, 255, 10) : new Color(255, 255, 255, 5));
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                g2d.setColor(sel ? new Color(0, 194, 255, 90) : hover ? new Color(255, 255, 255, 25) : BORDER);
+                g2d.setStroke(new BasicStroke(1));
+                g2d.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 6, 6);
+                g2d.setFont(new Font("Consolas", Font.BOLD, 12));
+                g2d.setColor(sel ? ACCENT : hover ? TEXT_PRI : TEXT_SEC);
                 FontMetrics fm = g2d.getFontMetrics();
-                int tx = (getWidth() - fm.stringWidth(getText())) / 2;
-                int ty = (getHeight() + fm.getAscent()) / 2 - 2;
-                g2d.setColor(new Color(0, 0, 0, 100));
-                g2d.drawString(getText(), tx + 2, ty + 2);
-                g2d.setColor(Color.WHITE);
-                g2d.drawString(getText(), tx, ty);
+                g2d.drawString(getText(), (getWidth() - fm.stringWidth(getText())) / 2,
+                        (getHeight() + fm.getAscent()) / 2 - 2);
             }
         };
-        btn.setBounds(x, y, width, height);
-        btn.setFont(MinecraftFont.getBold(14));
+        btn.putClientProperty("selected", selected);
+        btn.setBounds(x, y, w, h);
         btn.setFocusPainted(false);
         btn.setBorderPainted(false);
         btn.setContentAreaFilled(false);
@@ -586,55 +785,81 @@ class LauncherGUI extends JFrame {
         return btn;
     }
 
-    private JButton createSmallButton(String text, int x, int y, int width, int height) {
+    private JButton createNavButton(String text, int x, int y, int w, int h) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                boolean hover = getModel().isRollover();
+                boolean active = getForeground().equals(ACCENT);
+                if (active) {
+                    g2d.setColor(new Color(0, 194, 255, 12));
+                    g2d.fillRect(0, 0, getWidth(), getHeight());
+                    g2d.setColor(ACCENT);
+                    g2d.fillRect(0, 0, 2, getHeight());
+                } else if (hover) {
+                    g2d.setColor(new Color(255, 255, 255, 8));
+                    g2d.fillRect(0, 0, getWidth(), getHeight());
+                }
+                g2d.setFont(getFont());
+                g2d.setColor(getForeground());
+                FontMetrics fm = g2d.getFontMetrics();
+                g2d.drawString(getText(), 20, (getHeight() + fm.getAscent()) / 2 - 2);
+            }
+        };
+        btn.setBounds(x, y, w, h);
+        btn.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        btn.setFocusPainted(false);
+        btn.setBorderPainted(false);
+        btn.setContentAreaFilled(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.addMouseListener(new MouseAdapter() {
+            public void mouseEntered(MouseEvent e) {
+                btn.repaint();
+            }
+
+            public void mouseExited(MouseEvent e) {
+                btn.repaint();
+            }
+        });
+        return btn;
+    }
+
+    private JButton createToolbarButton(String text) {
         JButton btn = new JButton(text) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2d = (Graphics2D) g;
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (getModel().isPressed())
-                    g2d.setColor(new Color(40, 40, 60));
-                else if (getModel().isRollover())
-                    g2d.setColor(new Color(60, 60, 80));
-                else
-                    g2d.setColor(new Color(50, 50, 70));
-                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
-                g2d.setColor(new Color(100, 200, 255, 50));
-                g2d.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                g2d.setColor(getModel().isPressed() ? new Color(255, 255, 255, 12)
+                        : getModel().isRollover() ? new Color(255, 255, 255, 8) : new Color(255, 255, 255, 4));
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                g2d.setColor(getModel().isRollover() ? new Color(255, 255, 255, 30) : BORDER);
+                g2d.setStroke(new BasicStroke(1));
+                g2d.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 6, 6);
                 g2d.setFont(getFont());
-                g2d.setColor(new Color(200, 200, 200));
+                g2d.setColor(getModel().isRollover() ? TEXT_PRI : TEXT_SEC);
                 FontMetrics fm = g2d.getFontMetrics();
                 g2d.drawString(getText(), (getWidth() - fm.stringWidth(getText())) / 2,
                         (getHeight() + fm.getAscent()) / 2 - 2);
             }
         };
-        btn.setBounds(x, y, width, height);
-        btn.setFont(MinecraftFont.getFont(11));
+        btn.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        btn.setPreferredSize(new Dimension(100, 26));
         btn.setFocusPainted(false);
         btn.setBorderPainted(false);
         btn.setContentAreaFilled(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        return btn;
-    }
+        btn.addMouseListener(new MouseAdapter() {
+            public void mouseEntered(MouseEvent e) {
+                btn.repaint();
+            }
 
-    private void styleModernComboBox(JComboBox<?> combo) {
-        combo.setBackground(new Color(40, 40, 60));
-        combo.setForeground(Color.WHITE);
-        combo.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(new Color(100, 200, 255, 50), 2, true),
-                BorderFactory.createEmptyBorder(5, 10, 5, 10)));
-        combo.setFocusable(false);
-        combo.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean sel,
-                    boolean focus) {
-                super.getListCellRendererComponent(list, value, index, sel, focus);
-                setBackground(sel ? new Color(100, 200, 255) : new Color(40, 40, 60));
-                setForeground(Color.WHITE);
-                setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-                return this;
+            public void mouseExited(MouseEvent e) {
+                btn.repaint();
             }
         });
+        return btn;
     }
 
     // ─── TITLE BAR ───────────────────────────────────────────────────────────────
@@ -643,33 +868,21 @@ class LauncherGUI extends JFrame {
         JPanel titleBar = new JPanel(null) {
             @Override
             protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
                 Graphics2D g2d = (Graphics2D) g;
-                g2d.setPaint(new GradientPaint(0, 0, new Color(20, 20, 40, 220), 0, getHeight(),
-                        new Color(10, 10, 30, 220)));
+                g2d.setColor(new Color(6, 8, 16));
                 g2d.fillRect(0, 0, getWidth(), getHeight());
-                g2d.setColor(new Color(100, 200, 255, 50));
+                g2d.setColor(BORDER);
                 g2d.fillRect(0, getHeight() - 1, getWidth(), 1);
             }
         };
-        titleBar.setBounds(0, 0, 1280, 40);
+        titleBar.setBounds(0, 0, 1280, 38);
         titleBar.setOpaque(false);
 
-        JLabel title = new JLabel("Stellar Launcher");
-        title.setFont(MinecraftFont.getBold(14));
-        title.setForeground(new Color(100, 200, 255));
-        title.setBounds(15, 10, 300, 20);
-        titleBar.add(title);
-
-        JButton minimizeBtn = createWindowButton("_", 1160, 5, 30, 30);
+        JButton minimizeBtn = createWindowButton("_", 1190, 4, 28, 28);
         minimizeBtn.addActionListener(e -> setState(JFrame.ICONIFIED));
         titleBar.add(minimizeBtn);
 
-        JButton maximizeBtn = createWindowButton("□", 1200, 5, 30, 30);
-        maximizeBtn.setEnabled(false);
-        titleBar.add(maximizeBtn);
-
-        JButton closeBtn = createWindowButton("X", 1240, 5, 30, 30);
+        JButton closeBtn = createWindowButton("X", 1244, 4, 28, 28);
         closeBtn.addActionListener(e -> {
             dispose();
             System.exit(0);
@@ -699,20 +912,18 @@ class LauncherGUI extends JFrame {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2d = (Graphics2D) g;
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (getModel().isPressed())
-                    g2d.setColor(new Color(255, 60, 60));
-                else if (getModel().isRollover())
-                    g2d.setColor(new Color(255, 255, 255, 30));
-                else
-                    g2d.setColor(new Color(0, 0, 0, 0));
-                g2d.fillRect(0, 0, getWidth(), getHeight());
-                g2d.setColor(MC_TEXT);
-                g2d.setStroke(new BasicStroke(2));
-                int cx = getWidth() / 2, cy = getHeight() / 2, s = 8;
+                boolean hover = getModel().isRollover();
+                boolean press = getModel().isPressed();
+                Color bg = type.equals("X")
+                        ? (hover || press ? new Color(220, 50, 50, 180) : new Color(0, 0, 0, 0))
+                        : (hover || press ? new Color(255, 255, 255, 20) : new Color(0, 0, 0, 0));
+                g2d.setColor(bg);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 4, 4);
+                g2d.setColor(hover ? TEXT_PRI : TEXT_DIM);
+                g2d.setStroke(new BasicStroke(1.2f));
+                int cx = getWidth() / 2, cy = getHeight() / 2, s = 5;
                 if (type.equals("_"))
-                    g2d.drawLine(cx - s, cy, cx + s, cy);
-                else if (type.equals("□"))
-                    g2d.drawRect(cx - s / 2, cy - s / 2, s, s);
+                    g2d.drawLine(cx - s, cy + 2, cx + s, cy + 2);
                 else {
                     g2d.drawLine(cx - s, cy - s, cx + s, cy + s);
                     g2d.drawLine(cx - s, cy + s, cx + s, cy - s);
@@ -751,8 +962,17 @@ class LauncherGUI extends JFrame {
         saveConfig();
     }
 
+    // ─── REPAIR MENU ─────────────────────────────────────────────────────────────
+
     private void openRepairMenu() {
-        String[] options = { "Open Mods Folder", "Reinstall Version", "Settings", "Cancel" };
+        String[] options = {
+                "Open Mods Folder",
+                "Reinstall Version",
+                "Disable All User Mods",
+                "Disable All Preinstalled Mods",
+                "Settings",
+                "Cancel"
+        };
         int choice = JOptionPane.showOptionDialog(this, "Repair Options:", "Repair",
                 JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
         switch (choice) {
@@ -763,9 +983,107 @@ class LauncherGUI extends JFrame {
                 reinstallVersion();
                 break;
             case 2:
+                disableAllUserMods();
+                break;
+            case 3:
+                disableAllPreinstalledMods();
+                break;
+            case 4:
                 openSettings();
                 break;
         }
+    }
+
+    private void disableAllUserMods() {
+        String cleanVersion = selectedVersion.contains("-")
+                ? selectedVersion.substring(selectedVersion.lastIndexOf("-") + 1)
+                : selectedVersion;
+
+        File userModsDir = new File(StellarLauncher.LAUNCHER_DIR, "mods/" + cleanVersion);
+        File[] mods = userModsDir.listFiles((d, n) -> n.endsWith(".jar"));
+
+        if (mods == null || mods.length == 0) {
+            JOptionPane.showMessageDialog(this, "Brak aktywnych modów gracza dla wersji " + cleanVersion + ".",
+                    "Brak modów", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Wyłączyć wszystkie mody gracza dla " + cleanVersion + "? (" + mods.length + " modów)\n"
+                        + "Pliki zostaną przemianowane na .jar.disabled — można cofnąć ręcznie.",
+                "Disable All User Mods", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION)
+            return;
+
+        int disabled = 0;
+        for (File mod : mods) {
+            File target = new File(mod.getParentFile(), mod.getName() + ".disabled");
+            if (mod.renameTo(target)) {
+                log("🔕 Wyłączono: " + mod.getName());
+                disabled++;
+            } else {
+                log("⚠️ Nie można wyłączyć: " + mod.getName());
+            }
+        }
+        JOptionPane.showMessageDialog(this, "Wyłączono " + disabled + " modów gracza.",
+                "Gotowe", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // Wyjątki — te preinstalled mody NIGDY nie są wyłączane
+    private static final java.util.Set<String> PREINSTALLED_WHITELIST = new java.util.HashSet<>(
+            java.util.Arrays.asList("sodium", "sodium-extra", "fabric-api", "lithium"));
+
+    private boolean isWhitelisted(String fileName) {
+        String lower = fileName.toLowerCase();
+        for (String key : PREINSTALLED_WHITELIST) {
+            if (lower.startsWith(key))
+                return true;
+        }
+        return false;
+    }
+
+    private void disableAllPreinstalledMods() {
+        String cleanVersion = selectedVersion.contains("-")
+                ? selectedVersion.substring(selectedVersion.lastIndexOf("-") + 1)
+                : selectedVersion;
+
+        File preinstalledDir = new File(StellarLauncher.LAUNCHER_DIR, "mods/" + cleanVersion + "/.preinstalled");
+        File[] mods = preinstalledDir.listFiles((d, n) -> n.endsWith(".jar"));
+
+        if (mods == null || mods.length == 0) {
+            JOptionPane.showMessageDialog(this, "Brak aktywnych preinstalled modów dla wersji " + cleanVersion + ".",
+                    "Brak modów", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        long toDisable = java.util.Arrays.stream(mods).filter(f -> !isWhitelisted(f.getName())).count();
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Wyłączyć preinstalled mody dla " + cleanVersion + "? (" + toDisable + " modów)\n"
+                        + "Pozostawione zostaną: sodium, sodium-extra, fabric-api, lithium.\n"
+                        + "Pliki zostaną przemianowane na .jar.disabled — można cofnąć ręcznie.",
+                "Disable All Preinstalled Mods", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION)
+            return;
+
+        int disabled = 0, skipped = 0;
+        for (File mod : mods) {
+            if (isWhitelisted(mod.getName())) {
+                log("✅ Pozostawiono: " + mod.getName());
+                skipped++;
+                continue;
+            }
+            File target = new File(mod.getParentFile(), mod.getName() + ".disabled");
+            if (mod.renameTo(target)) {
+                log("🔕 Wyłączono: " + mod.getName());
+                disabled++;
+            } else {
+                log("⚠️ Nie można wyłączyć: " + mod.getName());
+            }
+        }
+        JOptionPane.showMessageDialog(this,
+                "Wyłączono " + disabled + " modów.\nPominięto (whitelist): " + skipped + " modów.",
+                "Gotowe", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void reinstallVersion() {
@@ -1217,30 +1535,121 @@ class LauncherGUI extends JFrame {
 
     // ─── MODS ────────────────────────────────────────────────────────────────────
 
+    /**
+     * Wykrywa producenta GPU.
+     * Windows: wmic path win32_VideoController
+     * Linux: lspci
+     * Zwraca: "NVIDIA", "INTEL", "AMD" lub "UNKNOWN"
+     */
+    private String detectGPUVendor() {
+        try {
+            String os = System.getProperty("os.name", "").toLowerCase();
+
+            if (os.contains("win")) {
+                Process p = new ProcessBuilder("wmic", "path", "win32_VideoController", "get", "name")
+                        .redirectErrorStream(true).start();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.equalsIgnoreCase("name"))
+                            continue;
+                        // Zwraca pierwszą kartę graficzną (ignoruje Microsoft Basic Display)
+                        if (line.toLowerCase().contains("microsoft basic"))
+                            continue;
+                        return formatGPUName(line);
+                    }
+                }
+            } else {
+                Process p = new ProcessBuilder("lspci")
+                        .redirectErrorStream(true).start();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String lower = line.toLowerCase();
+                        if (lower.contains("vga") || lower.contains("display") || lower.contains("3d")) {
+                            // Wyciągamy część po ostatnim ":"
+                            int idx = line.lastIndexOf(":");
+                            if (idx != -1)
+                                return formatGPUName(line.substring(idx + 1).trim());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log("⚠️ GPU detection failed: " + e.getMessage());
+        }
+        return "UNKNOWN";
+    }
+
+    private String formatGPUName(String raw) {
+        if (raw == null || raw.isEmpty())
+            return "UNKNOWN";
+        // Skróć zbędne końcówki
+        raw = raw.replaceAll("(?i)\\s*/\\s*.*", ""); // np. "RTX 3060 / something" → "RTX 3060"
+        raw = raw.trim();
+        return raw;
+    }
+
+    /**
+     * Sprawdza czy dany mod jest kompatybilny z wykrytym GPU.
+     */
+    private boolean isModCompatibleWithGPU(String fileName, String gpuName) {
+        String vendor = gpuName.toLowerCase().contains("nvidia") ? "NVIDIA"
+                : gpuName.toLowerCase().contains("intel") ? "INTEL"
+                        : gpuName.toLowerCase().contains("amd") || gpuName.toLowerCase().contains("radeon") ? "AMD"
+                                : "UNKNOWN";
+        if (vendor.equals("UNKNOWN") || vendor.equals("NVIDIA"))
+            return true;
+        String lower = fileName.toLowerCase();
+        for (java.util.Map.Entry<String, java.util.Set<String>> entry : GPU_MOD_BLACKLIST.entrySet()) {
+            if (lower.contains(entry.getKey()) && entry.getValue().contains(vendor))
+                return false;
+        }
+        return true;
+    }
+
     private void setupModsForVersion(String version) {
         log("📦 Setting up mods for " + version + "...");
+
+        String gpuVendor = detectGPUVendor();
+        log("🖥️ Wykryty GPU vendor: " + gpuVendor);
+        if (!gpuVendor.equals("NVIDIA") && !gpuVendor.equals("UNKNOWN")) {
+            log("⚠️ Niekompatybilne mody zostaną pominięte dla: " + gpuVendor);
+        }
+
         File instanceModsDir = new File(StellarLauncher.MINECRAFT_DIR, "mods");
         instanceModsDir.mkdirs();
         clearModsFolder(instanceModsDir);
 
         String cleanVersion = version.contains("-") ? version.substring(version.lastIndexOf("-") + 1) : version;
 
+        // ── Preinstalled mods ──────────────────────────────────────────────────────
         File preinstalledDir = new File(StellarLauncher.LAUNCHER_DIR, "mods/" + cleanVersion + "/.preinstalled");
         if (preinstalledDir.exists()) {
             File[] pre = preinstalledDir.listFiles((d, n) -> n.endsWith(".jar"));
             if (pre != null && pre.length > 0) {
-                log("  📦 Preinstalled: " + pre.length + " modów");
+                int copied = 0, skipped = 0;
                 for (File mod : pre) {
+                    if (!isModCompatibleWithGPU(mod.getName(), gpuVendor)) {
+                        log("  🚫 Pominięto (GPU): " + mod.getName());
+                        skipped++;
+                        continue;
+                    }
                     try {
                         Files.copy(mod.toPath(), new File(instanceModsDir, mod.getName()).toPath(),
                                 StandardCopyOption.REPLACE_EXISTING);
+                        copied++;
                     } catch (Exception e) {
                         log("  ⚠️ " + mod.getName() + ": " + e.getMessage());
                     }
                 }
+                log("  📦 Preinstalled: " + copied + " skopiowano"
+                        + (skipped > 0 ? ", " + skipped + " pominięto (GPU)" : ""));
             }
         }
 
+        // ── User mods ──────────────────────────────────────────────────────────────
         File launcherModsDir = new File(StellarLauncher.LAUNCHER_DIR, "mods/" + cleanVersion);
         launcherModsDir.mkdirs();
 
@@ -1250,6 +1659,10 @@ class LauncherGUI extends JFrame {
         } else {
             log("  🧩 Mody gracza: " + mods.length);
             for (File mod : mods) {
+                if (!isModCompatibleWithGPU(mod.getName(), gpuVendor)) {
+                    log("  🚫 Pominięto (GPU): " + mod.getName());
+                    continue;
+                }
                 try {
                     Files.copy(mod.toPath(), new File(instanceModsDir, mod.getName()).toPath(),
                             StandardCopyOption.REPLACE_EXISTING);
