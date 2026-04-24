@@ -1,10 +1,8 @@
 package pl.stellarlauncher.discord;
 
 import com.sun.jna.Structure;
-
-import pl.stellarlauncher.DiscordUser;
-
 import com.sun.jna.Callback;
+import pl.stellarlauncher.DiscordUser; // ← zostaw tak jak jest, plik wyżej to naprawia
 import java.util.Arrays;
 import java.util.List;
 

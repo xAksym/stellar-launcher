@@ -118,11 +118,13 @@ class LauncherGUI extends JFrame {
         loadRAMSettings();
         loadAutoCloseSettings();
         initDiscordRPC();
+        new AutoUpdater(this).checkAsync();
 
         setVisible(true);
     }
 
-    // ─── ICON ────────────────────────────────────────────────────────────────────
+    // ─── ICON
+    // ──────────────────────────────f──────────────────────────────────────
 
     private void loadIcon() {
         try {
@@ -242,15 +244,34 @@ class LauncherGUI extends JFrame {
     }
 
     private void copyModsFromResources() {
+        // Znacznik: jeśli wersja launchera się nie zmieniła, nie ekstraktuj ponownie
+        File markerFile = new File(StellarLauncher.LAUNCHER_DIR, "mods/.extracted_" + StellarLauncher.VERSION);
+
+        if (markerFile.exists()) {
+            log("ℹ️ Preinstalled mods już zainstalowane (v" + StellarLauncher.VERSION + "), pomijam.");
+            return;
+        }
+
+        // Usuń stare znaczniki innych wersji
+        File modsBase = new File(StellarLauncher.LAUNCHER_DIR, "mods");
+        File[] oldMarkers = modsBase.listFiles((d, n) -> n.startsWith(".extracted_"));
+        if (oldMarkers != null)
+            for (File f : oldMarkers)
+                f.delete();
+
+        // Właściwa ekstrakcja
         try {
             URL location = getClass().getProtectionDomain().getCodeSource().getLocation();
             File locationFile = new File(location.toURI());
-
-            if (locationFile.isFile()) {
+            if (locationFile.isFile())
                 copyModsFromJarFile(locationFile);
-            } else {
+            else
                 copyModsFromClassesDirectory(locationFile);
-            }
+
+            // Stwórz znacznik po udanej ekstrakcji
+            markerFile.getParentFile().mkdirs();
+            markerFile.createNewFile();
+            log("✅ Znacznik ekstrakcji zapisany.");
         } catch (Exception e) {
             log("⚠️ Mods resources copy: " + e.getMessage());
         }
@@ -1631,9 +1652,15 @@ class LauncherGUI extends JFrame {
             if (pre != null && pre.length > 0) {
                 int copied = 0, skipped = 0;
                 for (File mod : pre) {
+                    // W setupModsForVersion(), zamiast tylko "log + continue":
                     if (!isModCompatibleWithGPU(mod.getName(), gpuVendor)) {
                         log("  🚫 Pominięto (GPU): " + mod.getName());
                         skipped++;
+                        // Opcjonalnie: oznacz plik jako .disabled w preinstalled
+                        File disabled = new File(mod.getParentFile(), mod.getName() +
+                                ".gpu-disabled");
+                        if (!disabled.exists())
+                            mod.renameTo(disabled);
                         continue;
                     }
                     try {
@@ -1781,7 +1808,7 @@ class LauncherGUI extends JFrame {
         log("🎮 Main class: " + mainClass);
 
         List<String> command = new ArrayList<>();
-        command.add(System.getProperty("java.home") + File.separator + "bin" + File.separator + "java");
+        command.add(findJavaExecutable());
         command.add("-Xmx" + allocatedRAM + "M");
         command.add("-Xms" + Math.min(allocatedRAM / 2, 2048) + "M");
         command.add("-XX:+UnlockExperimentalVMOptions");
@@ -2411,6 +2438,93 @@ class LauncherGUI extends JFrame {
         if (bytes < 1024 * 1024)
             return String.format("%.1f KB", bytes / 1024.0);
         return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
+    }
+
+    /**
+     * Szuka Java 21 na systemie. Fallback → java.home (Java launchera).
+     * Kolejność: JAVA_HOME env → znane ścieżki instalacji → embedded → launcher JRE
+     */
+    private String findJavaExecutable() {
+        String javaExe = System.getProperty("os.name", "").toLowerCase().contains("win")
+                ? "java.exe"
+                : "java";
+
+        // 1. Sprawdź JAVA_HOME
+        String javaHome = System.getenv("JAVA_HOME");
+        if (javaHome != null) {
+            File f = new File(javaHome, "bin" + File.separator + javaExe);
+            if (f.exists() && getJavaVersion(f.getAbsolutePath()) >= 21) {
+                log("☕ Java 21+ znaleziona (JAVA_HOME): " + f.getAbsolutePath());
+                return f.getAbsolutePath();
+            }
+        }
+
+        // 2. Embedded Java 21 w katalogu launchera
+        File embeddedJava = new File(StellarLauncher.LAUNCHER_DIR,
+                "runtime" + File.separator + "bin" + File.separator + javaExe);
+        if (embeddedJava.exists() && getJavaVersion(embeddedJava.getAbsolutePath()) >= 21) {
+            log("☕ Java 21 embedded: " + embeddedJava.getAbsolutePath());
+            return embeddedJava.getAbsolutePath();
+        }
+
+        // 3. Znane lokalizacje Windows
+        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+            for (String base : new String[] {
+                    "C:\\Program Files\\Java",
+                    "C:\\Program Files\\Eclipse Adoptium",
+                    "C:\\Program Files\\Microsoft",
+                    System.getProperty("user.home") + "\\.jdks"
+            }) {
+                File baseDir = new File(base);
+                if (!baseDir.exists())
+                    continue;
+                File[] subdirs = baseDir.listFiles(File::isDirectory);
+                if (subdirs == null)
+                    continue;
+                for (File jdk : subdirs) {
+                    File candidate = new File(jdk, "bin\\" + javaExe);
+                    if (candidate.exists() && getJavaVersion(candidate.getAbsolutePath()) >= 21) {
+                        log("☕ Java 21+ znaleziona: " + candidate.getAbsolutePath());
+                        return candidate.getAbsolutePath();
+                    }
+                }
+            }
+        }
+
+        // 4. Sprawdź aktualną JRE launchera — jeśli jest 21+, użyj jej
+        String launcherJava = System.getProperty("java.home") + File.separator + "bin" + File.separator + javaExe;
+        int launcherVer = getJavaVersion(launcherJava);
+        if (launcherVer >= 21) {
+            log("☕ Launcher JRE jest Java " + launcherVer + ", używam.");
+            return launcherJava;
+        }
+
+        // 5. Fallback + ostrzeżenie
+        log("⚠️ UWAGA: Nie znaleziono Java 21! Mody skompilowane dla Java 21 mogą crashować.");
+        log("   Zainstaluj JDK 21 lub ustaw JAVA_HOME.");
+        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,
+                "Nie znaleziono Java 21 na tym komputerze.\n" +
+                        "Mody skompilowane dla Java 21 (np. StellarMod) mogą nie działać.\n\n" +
+                        "Pobierz JDK 21 z: https://adoptium.net",
+                "Java 21 wymagana",
+                JOptionPane.WARNING_MESSAGE));
+        return launcherJava; // uruchom mimo wszystko
+    }
+
+    private int getJavaVersion(String javaPath) {
+        try {
+            Process p = new ProcessBuilder(javaPath, "-version")
+                    .redirectErrorStream(true).start();
+            String output = new String(p.getInputStream().readAllBytes());
+            p.waitFor();
+            // "java version \"21.0.2\"" lub "openjdk version \"21.0.1\""
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("version \"(\\d+)").matcher(output);
+            if (m.find())
+                return Integer.parseInt(m.group(1));
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 
     // ─── DISPOSE ─────────────────────────────────────────────────────────────────

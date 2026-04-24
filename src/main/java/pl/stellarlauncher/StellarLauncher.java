@@ -58,36 +58,3 @@ class Account {
         this.accessToken = null;
     }
 }
-
-class DiscordRPC {
-    private boolean initialized = false;
-
-    public void init() {
-        // Discord RPC initialization would go here
-        // Requires discord-rpc library: https://github.com/Vatuu/discord-rpc
-        initialized = true;
-    }
-
-    public void update(String details, String state) {
-        if (!initialized)
-            return;
-
-        // Update Discord Rich Presence
-        // Example with discord-rpc library:
-        /*
-         * DiscordRichPresence presence = new DiscordRichPresence();
-         * presence.details = details;
-         * presence.state = state;
-         * presence.largeImageKey = "stellarlauncher_logo";
-         * presence.largeImageText = "StellarLauncher";
-         * DiscordRPC.discordUpdatePresence(presence);
-         */
-    }
-
-    public void shutdown() {
-        if (!initialized)
-            return;
-        // DiscordRPC.discordShutdown();
-        initialized = false;
-    }
-}
